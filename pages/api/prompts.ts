@@ -1,57 +1,37 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import fs from 'fs'
-import path from 'path'
+import { connectToDatabase } from '@/utils/db'
+import { ObjectId } from 'mongodb'
 
-type Prompt = { id: string; title: string; content: string; categoryId?: string | null }
+type PromptDoc = { _id?: ObjectId; title: string; content: string; categoryId?: string | null }
 
-const dataDir = path.join(process.cwd(), 'data')
-const filePath = path.join(dataDir, 'prompts.json')
-
-function ensureData() {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
-  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, '[]', 'utf-8')
-}
-
-function readAll(): Prompt[] {
-  ensureData()
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8') || '[]')
-}
-
-function writeAll(data: Prompt[]) {
-  ensureData()
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
-}
-
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  const mode = process.env.NEXT_PUBLIC_STORAGE_MODE || 'local'
-  if (mode === 'local') {
-    // local 模式由前端处理，本 API 返回空集合防止报错
-    return res.status(200).json([])
-  }
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { db } = await connectToDatabase()
+  const col = db.collection<PromptDoc>('prompts')
 
   if (req.method === 'GET') {
-    return res.status(200).json(readAll())
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...rest }) => ({ id: String(_id), ...rest })))
   }
 
   if (req.method === 'POST') {
-    const body = req.body as Omit<Prompt, 'id'>
-    const next = [...readAll(), { ...body, id: crypto.randomUUID() }]
-    writeAll(next)
-    return res.status(200).json(next)
+    const body = req.body as Omit<PromptDoc, '_id'>
+    const r = await col.insertOne({ ...body })
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...rest }) => ({ id: String(_id), ...rest })))
   }
 
   if (req.method === 'PUT') {
-    const body = req.body as Prompt
-    const next = readAll().map((p) => (p.id === body.id ? { ...p, ...body } : p))
-    writeAll(next)
-    return res.status(200).json(next)
+    const { id, ...rest } = req.body as any
+    await col.updateOne({ _id: new ObjectId(id) }, { $set: rest })
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...r }) => ({ id: String(_id), ...r })))
   }
 
   if (req.method === 'DELETE') {
     const id = String(req.query.id)
-    const next = readAll().filter((p) => p.id !== id)
-    writeAll(next)
-    return res.status(200).json(next)
+    await col.deleteOne({ _id: new ObjectId(id) })
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...r }) => ({ id: String(_id), ...r })))
   }
 
   return res.status(405).end()

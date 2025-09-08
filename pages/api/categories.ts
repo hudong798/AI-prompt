@@ -1,57 +1,37 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import fs from 'fs'
-import path from 'path'
+import { connectToDatabase } from '@/utils/db'
+import { ObjectId } from 'mongodb'
 
-type Category = { id: string; name: string }
+type CategoryDoc = { _id?: ObjectId; name: string }
 
-const dataDir = path.join(process.cwd(), 'data')
-const filePath = path.join(dataDir, 'categories.json')
-
-function ensureData() {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
-  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, '[]', 'utf-8')
-}
-
-function readAll(): Category[] {
-  ensureData()
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8') || '[]')
-}
-
-function writeAll(data: Category[]) {
-  ensureData()
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
-}
-
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  const mode = process.env.NEXT_PUBLIC_STORAGE_MODE || 'local'
-  if (mode === 'local') {
-    // local 模式由前端处理，本 API 返回空集合防止报错
-    return res.status(200).json([])
-  }
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { db } = await connectToDatabase()
+  const col = db.collection<CategoryDoc>('categories')
 
   if (req.method === 'GET') {
-    return res.status(200).json(readAll())
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...rest }) => ({ id: String(_id), ...rest })))
   }
 
   if (req.method === 'POST') {
-    const body = req.body as Omit<Category, 'id'>
-    const next = [...readAll(), { ...body, id: crypto.randomUUID() }]
-    writeAll(next)
-    return res.status(200).json(next)
+    const body = req.body as Omit<CategoryDoc, '_id'>
+    await col.insertOne({ ...body })
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...rest }) => ({ id: String(_id), ...rest })))
   }
 
   if (req.method === 'PUT') {
-    const body = req.body as Category
-    const next = readAll().map((c) => (c.id === body.id ? { ...c, ...body } : c))
-    writeAll(next)
-    return res.status(200).json(next)
+    const { id, ...rest } = req.body as any
+    await col.updateOne({ _id: new ObjectId(id) }, { $set: rest })
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...r }) => ({ id: String(_id), ...r })))
   }
 
   if (req.method === 'DELETE') {
     const id = String(req.query.id)
-    const next = readAll().filter((c) => c.id !== id)
-    writeAll(next)
-    return res.status(200).json(next)
+    await col.deleteOne({ _id: new ObjectId(id) })
+    const list = await col.find({}).sort({ _id: -1 }).toArray()
+    return res.status(200).json(list.map(({ _id, ...r }) => ({ id: String(_id), ...r })))
   }
 
   return res.status(405).end()

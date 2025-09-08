@@ -3,7 +3,7 @@ import Head from 'next/head'
 import CategoryList from '@/components/CategoryList'
 import PromptCard from '@/components/PromptCard'
 import PromptForm from '@/components/PromptForm'
-import { STORAGE_MODE, isLocalMode, readLocalJson, writeLocalJson, apiJson } from '@/utils/storage'
+import { apiJson } from '@/utils/storage'
 
 export type Category = {
   id: string
@@ -28,11 +28,6 @@ export default function Home() {
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null)
 
   const loadData = async () => {
-    if (isLocalMode()) {
-      setCategories(readLocalJson('categories', []))
-      setPrompts(readLocalJson('prompts', []))
-      return
-    }
     const [cats, prs] = await Promise.all([
       apiJson<Category[]>('/api/categories'),
       apiJson<Prompt[]>('/api/prompts'),
@@ -55,55 +50,26 @@ export default function Home() {
   }, [prompts, activeCategoryId, search])
 
   const upsertPrompt = async (payload: Omit<Prompt, 'id'> & { id?: string }) => {
-    if (isLocalMode()) {
-      const id = payload.id ?? crypto.randomUUID()
-      const next = [...prompts.filter((p) => p.id !== id), { ...payload, id }]
-      setPrompts(next)
-      writeLocalJson('prompts', next)
-      return
-    }
     const method = payload.id ? 'PUT' : 'POST'
     const data = await apiJson<Prompt[]>('/api/prompts', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     setPrompts(data)
   }
 
   const removePrompt = async (id: string) => {
-    if (isLocalMode()) {
-      const next = prompts.filter((p) => p.id !== id)
-      setPrompts(next)
-      writeLocalJson('prompts', next)
-      return
-    }
     const data = await apiJson<Prompt[]>('/api/prompts?id=' + id, { method: 'DELETE' })
     setPrompts(data)
   }
 
   const upsertCategory = async (payload: Omit<Category, 'id'> & { id?: string }) => {
-    if (isLocalMode()) {
-      const id = payload.id ?? crypto.randomUUID()
-      const next = [...categories.filter((c) => c.id !== id), { ...payload, id }]
-      setCategories(next)
-      writeLocalJson('categories', next)
-      return
-    }
     const method = payload.id ? 'PUT' : 'POST'
     const data = await apiJson<Category[]>('/api/categories', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     setCategories(data)
   }
 
   const removeCategory = async (id: string) => {
-    if (isLocalMode()) {
-      const nextCategories = categories.filter((c) => c.id !== id)
-      const nextPrompts = prompts.map((p) => (p.categoryId === id ? { ...p, categoryId: null } : p))
-      setCategories(nextCategories)
-      setPrompts(nextPrompts)
-      writeLocalJson('categories', nextCategories)
-      writeLocalJson('prompts', nextPrompts)
-      if (activeCategoryId === id) setActiveCategoryId(null)
-      return
-    }
     const data = await apiJson<Category[]>('/api/categories?id=' + id, { method: 'DELETE' })
     setCategories(data)
+    if (activeCategoryId === id) setActiveCategoryId(null)
   }
 
   return (
