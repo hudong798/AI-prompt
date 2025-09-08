@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Category, Prompt } from '@/pages'
+import { Category, Prompt } from '@/types/index'
 
 type Props = {
   categories: Category[]

@@ -4,18 +4,8 @@ import CategoryList from '@/components/CategoryList'
 import PromptCard from '@/components/PromptCard'
 import PromptForm from '@/components/PromptForm'
 import { apiJson } from '@/utils/storage'
+import { Category, Prompt } from '@/types/index'
 
-export type Category = {
-  id: string
-  name: string
-}
-
-export type Prompt = {
-  id: string
-  title: string
-  content: string
-  categoryId?: string | null
-}
 
 
 export default function Home() {

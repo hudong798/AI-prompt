@@ -1,4 +1,4 @@
-import { Prompt } from '@/pages'
+import { Prompt } from '@/types/index'
 
 type Props = {
   prompt: Prompt

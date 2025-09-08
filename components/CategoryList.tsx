@@ -1,4 +1,4 @@
-import { Category } from '@/pages'
+import { Category } from '@/types/index'
 
 type Props = {
   categories: Category[]
